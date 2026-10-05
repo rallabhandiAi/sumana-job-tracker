@@ -785,6 +785,59 @@
   }
   $("#recheckBtn").addEventListener("click", () => { const p = $("#recheckPanel"); p.hidden = !p.hidden; renderRecheck(); });
   $("#rcClose").addEventListener("click", () => { $("#recheckPanel").hidden = true; });
+
+  // ---------------------------------------------------------------- resume (files in the data repo's resume/ folder)
+  const RESUME_DIR = "resume";
+  const RESUME_TYPES = { pdf: ["PDF", "application/pdf"], docx: ["Word", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"], doc: ["Word", "application/msword"] };
+  const resumeType = (name) => { const ext = (String(name).split(".").pop() || "").toLowerCase(); return RESUME_TYPES[ext] || [ext.toUpperCase() || "File", "application/octet-stream"]; };
+  const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round((n || 0) / 1024))} KB`);
+  const contentsUrl = (path) => `${repoUrl()}/contents/${String(path).split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(cfg.branch)}`;
+  async function openResume() {
+    const box = $("#resumeFiles");
+    $("#resumePanel").hidden = false;
+    if (!canUseApi()) { box.innerHTML = `<p class="hint">Add your GitHub token in Settings to download the resume.</p>`; return; }
+    box.innerHTML = `<p class="hint">Loading…</p>`;
+    try {
+      const r = await fetch(contentsUrl(RESUME_DIR), { headers: headers(), cache: "no-store" });
+      if (r.status === 404) { box.innerHTML = `<p class="hint">No resume yet. Add the files to a <b>resume</b> folder in the data repository.</p>`; return; }
+      if (!r.ok) throw httpError(r.status);
+      const list = await r.json();
+      const files = (Array.isArray(list) ? list : []).filter((f) => f && f.type === "file" && !String(f.name).startsWith("."))
+        .sort((a, b) => resumeType(a.name)[0].localeCompare(resumeType(b.name)[0]) || a.name.localeCompare(b.name));
+      box.innerHTML = files.length ? files.map((f) => `<div class="rfile"><span class="rkind">${esc(resumeType(f.name)[0])}</span><span class="rname">${esc(f.name)}</span><span class="rsize">${esc(fileSize(f.size))}</span><button type="button" class="btn btn-primary" data-resume="${esc(f.path)}" data-name="${esc(f.name)}">Download</button></div>`).join("")
+        : `<p class="hint">The resume folder is empty.</p>`;
+    } catch (e) { box.innerHTML = `<p class="hint">Couldn't load the resume list (${esc(String(e.status || "network error"))}). Try again in a moment.</p>`; }
+  }
+  async function downloadResume(btn) {
+    const path = btn.dataset.resume, name = btn.dataset.name, label = btn.textContent;
+    btn.disabled = true; btn.textContent = "Downloading…";
+    try {
+      // Files up to 1 MB come back base64-encoded in the JSON; larger ones need the raw media type.
+      let bytes = null;
+      const r = await fetch(contentsUrl(path), { headers: headers(), cache: "no-store" });
+      if (!r.ok) throw httpError(r.status);
+      const meta = await r.json();
+      if (meta.encoding === "base64" && meta.content) {
+        const bin = atob(String(meta.content).replace(/\s/g, ""));
+        bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      } else {
+        const raw = await fetch(contentsUrl(path), { headers: headers("application/vnd.github.raw+json"), cache: "no-store" });
+        if (!raw.ok) throw httpError(raw.status);
+        bytes = new Uint8Array(await raw.arrayBuffer());
+      }
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([bytes], { type: resumeType(name)[1] })); a.download = name;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    } catch (e) { toast(`Couldn't download ${name} (${e.status || "network error"}).`); }
+    finally { btn.disabled = false; btn.textContent = label; }
+  }
+  const toggleResume = () => { if ($("#resumePanel").hidden) openResume(); else $("#resumePanel").hidden = true; };
+  $("#resumeBtn").addEventListener("click", toggleResume);
+  $("#resumeBtn2").addEventListener("click", toggleResume);
+  $("#resumeClose").addEventListener("click", () => { $("#resumePanel").hidden = true; });
+  $("#resumeFiles").addEventListener("click", (ev) => { const b = ev.target.closest("[data-resume]"); if (b && !b.disabled) downloadResume(b); });
   $("#rcStale").addEventListener("click", () => startRecheck("stale", []));
   $("#rcAll").addEventListener("click", () => startRecheck("all", []));
 

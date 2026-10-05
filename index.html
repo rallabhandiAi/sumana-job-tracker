@@ -32,6 +32,7 @@
       <p class="lastrun" id="lastrun"></p>
       <div class="side-actions">
         <button class="btn btn-primary" id="excelBtn" type="button">Download Excel</button>
+        <button class="btn btn-ghost" id="resumeBtn" type="button">Resume</button>
         <button class="btn btn-ghost" id="settingsBtn" type="button">Settings</button>
       </div>
     </div>
@@ -47,6 +48,7 @@
         <button class="btn btn-accent" id="recheckBtn" type="button" hidden>Re-check postings</button>
         <button class="btn btn-plain" id="addBtn" type="button" hidden>Add a role</button>
         <button class="btn btn-plain mobile-only" id="excelBtn2" type="button">Excel</button>
+        <button class="btn btn-plain mobile-only" id="resumeBtn2" type="button">Resume</button>
         <button class="btn btn-plain mobile-only" id="settingsBtn2" type="button">Settings</button>
       </div>
     </header>
@@ -86,6 +88,13 @@
       </div>
       <p class="rc-status" id="rcStatus" role="status"></p>
       <p class="conn" id="rcLast"></p>
+    </section>
+
+    <section class="panel" id="resumePanel" hidden aria-labelledby="resumeTitle">
+      <h2 id="resumeTitle">Resume</h2>
+      <p class="hint">Sumana's current resume, kept in the private data repository. To update it, replace the files in that repository's <b>resume</b> folder on GitHub; this list picks them up.</p>
+      <div class="rfiles" id="resumeFiles"></div>
+      <div class="form-actions"><button class="btn btn-plain" type="button" id="resumeClose">Close</button></div>
     </section>
 
     <section class="panel" id="addPanel" hidden aria-labelledby="addTitle">

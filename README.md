@@ -22,6 +22,7 @@ data/meta.json        search log (Activity page)
 data/contacts.json    recruiters and referrals (Contacts page)
 data/reverify.json    latest Re-check postings results
 data/profile.json     search profile used for the Excel export (keep it in the private data repo)
+resume/               resume files (Word, PDF) for the Resume panel (private data repo only)
 .nojekyll             serve files as-is (optional)
 ```
 
@@ -86,6 +87,7 @@ Open the site → **Settings** → check the owner, data repository and branch �
 - Choosing **Applied** fills in today's date; the role shows **Follow up** 7 days later.
 - **Re-check postings** opens each stale posting on GitHub's servers and marks gone or expired ones as Closed. Sites that block automatic checks are listed for you to open yourself.
 - **Download Excel** builds a workbook (Dashboard, Jobs, Contacts, Search Profile) from the current data.
+- **Resume** lists the files in the data repo's `resume` folder and downloads them with your token. Keep resumes in the private data repo only, never in this public site repo.
 - **Add a role** saves one found elsewhere (ChatGPT, LinkedIn, a recruiter call). The link is optional for recruiter leads.
 - Every change is a commit in the data repo, so you get a full history for free.
 
