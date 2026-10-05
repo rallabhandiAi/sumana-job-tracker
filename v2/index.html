@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://api.github.com; img-src 'self' data:; base-uri 'self'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Sumana's Job Tracker</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body class="v2">
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"></span>
+      <div><b>Sumana's Job Tracker</b><small>SoC design verification</small></div>
+    </div>
+    <nav class="nav" aria-label="Views">
+      <button type="button" class="navbtn" data-view="today">Today <span class="count" id="nc-today" hidden></span></button>
+      <button type="button" class="navbtn" data-view="roles">Opportunities <span class="count quiet" id="nc-roles" hidden></span></button>
+      <button type="button" class="navbtn" data-view="pipeline">Pipeline</button>
+      <button type="button" class="navbtn" data-view="contacts">Contacts <span class="count" id="nc-contacts" hidden></span></button>
+      <button type="button" class="navbtn" data-view="activity">Activity</button>
+    </nav>
+    <div class="side-foot">
+      <p class="runbox"><span class="dot" aria-hidden="true"></span><span>Search runs daily at <b>10:30 AM</b> and <b>8:30 PM</b> CT.</span></p>
+      <p class="lastrun" id="lastrun"></p>
+      <div class="side-actions">
+        <button class="btn btn-primary" id="excelBtn" type="button">Download Excel</button>
+        <button class="btn btn-ghost" id="settingsBtn" type="button">Settings</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="top">
+      <div>
+        <h1 id="viewTitle">Today</h1>
+        <p class="topsub" id="viewSub"></p>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-plain" id="addBtn" type="button" hidden>Add a role</button>
+        <button class="btn btn-plain mobile-only" id="excelBtn2" type="button">Excel</button>
+        <button class="btn btn-plain mobile-only" id="settingsBtn2" type="button">Settings</button>
+      </div>
+    </header>
+
+    <div class="notice" id="notice" role="status" hidden>
+      <span id="noticeText"></span>
+      <button class="btn" type="button" id="noticeBtn">Open Settings</button>
+    </div>
+
+    <section class="panel" id="settingsPanel" hidden aria-labelledby="settingsTitle">
+      <h2 id="settingsTitle">Connect to GitHub</h2>
+      <p class="hint">Roles, statuses, contacts and notes live as JSON files in a GitHub repository. Saving changes, or reading a private repository, needs a fine-grained personal access token with <b>Contents: Read and write</b> on that one repository. The token is stored only in this browser on this device.</p>
+      <form id="settingsForm" novalidate>
+        <div class="form-grid">
+          <div class="field"><label for="s-owner">GitHub owner</label><input id="s-owner" autocomplete="off" spellcheck="false" placeholder="your-username"></div>
+          <div class="field"><label for="s-repo">Data repository</label><input id="s-repo" autocomplete="off" spellcheck="false" placeholder="sumana-job-tracker-data"></div>
+          <div class="field"><label for="s-branch">Branch</label><input id="s-branch" autocomplete="off" spellcheck="false" placeholder="main"></div>
+          <div class="field span-2"><label for="s-token">Personal access token</label><input id="s-token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></div>
+        </div>
+        <div class="form-actions mt-12">
+          <button class="btn btn-accent" type="submit">Save and reload</button>
+          <button class="btn btn-plain" type="button" id="forgetBtn">Remove token from this device</button>
+          <button class="btn btn-plain" type="button" id="settingsCancel">Close</button>
+          <span class="form-msg" id="settingsMsg" role="status"></span>
+        </div>
+      </form>
+      <p class="conn" id="connLine"></p>
+    </section>
+
+    <section class="panel" id="addPanel" hidden aria-labelledby="addTitle">
+      <h2 id="addTitle">Add a role</h2>
+      <p class="hint">For roles found elsewhere: ChatGPT's search, LinkedIn, a recruiter call or a referral. The link is optional for recruiter leads.</p>
+      <form id="addForm" novalidate>
+        <div class="form-grid">
+          <div class="field span-2"><label for="f-title">Job title</label><input id="f-title" required placeholder="Senior Design Verification Engineer"></div>
+          <div class="field"><label for="f-company">Company</label><input id="f-company" required placeholder="Company or staffing vendor"></div>
+          <div class="field span-2"><label for="f-url">Posting link (optional)</label><input id="f-url" type="url" placeholder="https://…"></div>
+          <div class="field"><label for="f-source">Where it came from</label>
+            <select id="f-source"><option value="official">Company career site</option><option value="board">Job board</option><option value="vendor">Staffing vendor</option><option value="recruiter">Recruiter</option><option value="referral">Referral</option><option value="chatgpt">ChatGPT search</option></select></div>
+          <div class="field"><label for="f-location">Location</label><input id="f-location" placeholder="Remote (US) or Naperville, IL"></div>
+          <div class="field"><label for="f-mode">Work mode</label>
+            <select id="f-mode"><option>Remote</option><option>Hybrid</option><option>On-site</option><option>Confirm</option></select></div>
+          <div class="field"><label for="f-type">Type</label>
+            <select id="f-type"><option>Full-time</option><option>Contract</option><option>Contract W2</option><option>Contract C2C</option><option>Contract-to-hire</option></select></div>
+          <div class="field"><label for="f-fit">Match (1–5)</label>
+            <select id="f-fit"><option value="">Not scored</option><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></div>
+          <div class="field"><label for="f-pay">Pay</label><input id="f-pay" placeholder="$70–80/hr or $150K–180K"></div>
+          <div class="field"><label for="f-req">Req / job ID</label><input id="f-req" placeholder="e.g. 79768"></div>
+          <div class="field span-2"><label for="f-next">Next action</label><input id="f-next" list="nextActions" placeholder="Tailor resume, then apply"></div>
+        </div>
+        <div class="form-actions mt-12">
+          <button class="btn btn-accent" type="submit">Add to tracker</button>
+          <button class="btn btn-plain" type="button" id="addCancel">Cancel</button>
+          <span class="form-msg" id="addMsg" role="status"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- TODAY -->
+    <section class="view" id="view-today" aria-labelledby="viewTitle">
+      <div class="kpis" id="kpis"></div>
+      <div class="lanes">
+        <section class="lane apply" aria-labelledby="ln-apply"><h2 id="ln-apply">Apply next</h2><div id="laneApply" class="lane-list"></div></section>
+        <section class="lane follow" aria-labelledby="ln-follow"><h2 id="ln-follow">Follow up</h2><div id="laneFollow" class="lane-list"></div></section>
+        <section class="lane check" aria-labelledby="ln-check"><h2 id="ln-check">Re-check before applying</h2><div id="laneCheck" class="lane-list"></div></section>
+      </div>
+      <section class="stack" aria-labelledby="topTitle">
+        <div class="listhead"><h2 id="topTitle">Top opportunities right now</h2><button type="button" class="linkish" data-go="roles">See all roles</button></div>
+        <div class="tablewrap"><table class="toptable">
+          <thead><tr><th scope="col">Match</th><th scope="col">Role</th><th scope="col">Company</th><th scope="col">Where</th><th scope="col">Type · Pay</th><th scope="col">Source</th><th scope="col">Status</th><th scope="col">Next action</th></tr></thead>
+          <tbody id="topBody"></tbody>
+        </table></div>
+      </section>
+    </section>
+
+    <!-- OPPORTUNITIES -->
+    <section class="view" id="view-roles" hidden>
+      <div class="pipeline" id="pipeline"></div>
+      <div class="pipe-notes" id="pipenotes"></div>
+      <section class="filters" aria-label="Filter roles">
+        <label class="sr-only" for="q">Search roles</label>
+        <input id="q" class="search" type="search" placeholder="Search title, company or skill (UPF, SoC…)" autocomplete="off">
+        <div class="seg" role="group" aria-label="Where">
+          <button type="button" data-f="where" data-v="all" aria-pressed="true">All</button>
+          <button type="button" data-f="where" data-v="remote" aria-pressed="false">Remote</button>
+          <button type="button" data-f="where" data-v="chicago" aria-pressed="false">Chicago area</button>
+        </div>
+        <div class="seg" role="group" aria-label="Employment type">
+          <button type="button" data-f="type" data-v="all" aria-pressed="true">Any type</button>
+          <button type="button" data-f="type" data-v="contract" aria-pressed="false">Contract</button>
+          <button type="button" data-f="type" data-v="fulltime" aria-pressed="false">Full-time</button>
+        </div>
+        <div class="seg" role="group" aria-label="Match">
+          <button type="button" data-f="match" data-v="0" aria-pressed="true">Any match</button>
+          <button type="button" data-f="match" data-v="4" aria-pressed="false">4+</button>
+          <button type="button" data-f="match" data-v="5" aria-pressed="false">5</button>
+        </div>
+        <label class="sr-only" for="srcFilter">Source</label>
+        <select id="srcFilter" class="sort">
+          <option value="">Any source</option><option value="official">Official</option><option value="board">Job board</option><option value="vendor">Vendor</option><option value="recruiter">Recruiter</option><option value="referral">Referral</option><option value="chatgpt">ChatGPT</option><option value="manual">Added by you</option>
+        </select>
+        <label class="check" for="showClosed"><input type="checkbox" id="showClosed"> Show closed &amp; passed</label>
+        <label class="sr-only" for="sort">Sort roles</label>
+        <select id="sort" class="sort">
+          <option value="match">Best match</option>
+          <option value="newest">Newest found</option>
+          <option value="company">Company A–Z</option>
+        </select>
+      </section>
+      <div class="listhead"><h2>Roles</h2><span class="count" id="count"></span></div>
+      <div class="roles" id="roles">
+        <div class="empty"><h3>Loading the latest roles…</h3><p>Verified openings appear here with a match score, pay, work mode and a link to the posting.</p></div>
+      </div>
+    </section>
+
+    <!-- PIPELINE -->
+    <section class="view" id="view-pipeline" hidden>
+      <p class="hint">Drag a card to another column, or change its status on the card. New roles join this board once they're shortlisted.</p>
+      <div class="boardwrap"><div class="board" id="board"></div></div>
+      <p class="pipe-notes" id="boardNote"></p>
+    </section>
+
+    <!-- CONTACTS -->
+    <section class="view" id="view-contacts" hidden>
+      <div class="listhead"><h2>Recruiters, referrals and hiring managers</h2><button class="btn btn-plain" type="button" id="contactAddBtn">Add contact</button></div>
+      <section class="panel" id="contactPanel" hidden aria-labelledby="contactTitle">
+        <h2 id="contactTitle">Add contact</h2>
+        <form id="contactForm" novalidate>
+          <div class="form-grid">
+            <div class="field"><label for="c-name">Name</label><input id="c-name" required placeholder="First and last name"></div>
+            <div class="field"><label for="c-company">Company</label><input id="c-company" placeholder="Company or vendor"></div>
+            <div class="field"><label for="c-rel">Relationship</label>
+              <select id="c-rel"><option>Recruiter</option><option>Referral</option><option>Hiring manager</option><option>Former colleague</option><option>Other</option></select></div>
+            <div class="field span-2"><label for="c-role">Related role</label><input id="c-role" list="roleTitles" placeholder="Pick a tracked role or type one"></div>
+            <div class="field"><label for="c-status">Status</label>
+              <select id="c-status"><option>Active</option><option>Waiting</option><option>Done</option></select></div>
+            <div class="field span-2"><label for="c-reach">How to reach</label><input id="c-reach" placeholder="Email, phone or LinkedIn"></div>
+            <div class="field"><label for="c-last">Last contact</label><input id="c-last" type="date"></div>
+            <div class="field"><label for="c-next">Next follow-up</label><input id="c-next" type="date"></div>
+            <div class="field span-2"><label for="c-notes">Notes</label><textarea id="c-notes" placeholder="What was discussed, rate, next steps…"></textarea></div>
+          </div>
+          <div class="form-actions mt-12">
+            <button class="btn btn-accent" type="submit" id="contactSave">Save contact</button>
+            <button class="btn btn-plain" type="button" id="contactCancel">Cancel</button>
+            <span class="form-msg" id="contactMsg" role="status"></span>
+          </div>
+        </form>
+      </section>
+      <div class="contacts" id="contacts"></div>
+    </section>
+
+    <!-- ACTIVITY -->
+    <section class="view" id="view-activity" hidden>
+      <p class="hint">Every saved change and every search run is a commit in the private data repository. This is that history, newest first.</p>
+      <div class="timeline" id="timeline"></div>
+      <section class="log" aria-labelledby="logTitle">
+        <h2 id="logTitle">Search runs</h2>
+        <div class="tablewrap"><table>
+          <thead><tr><th scope="col">Run</th><th scope="col">New roles</th><th scope="col">Postings checked</th><th scope="col">Marked closed</th></tr></thead>
+          <tbody id="logBody"><tr><td colspan="4">No runs recorded yet.</td></tr></tbody>
+        </table></div>
+      </section>
+    </section>
+
+    <p class="foot">Match score: 5 = SoC-level verification plus a specialty (low-power/UPF, power management, boot or security) with the right seniority and location; 4 = strong SystemVerilog/UVM fit with small gaps; 3 = adjacent or needs a check. Several vendor postings can be the same end-client job; submit through one vendor only.</p>
+  </main>
+</div>
+
+<datalist id="nextActions">
+  <option value="Tailor resume, then apply"></option>
+  <option value="Request a referral"></option>
+  <option value="Re-check the posting"></option>
+  <option value="Follow up with recruiter"></option>
+  <option value="Prep for interview"></option>
+  <option value="Send thank-you note"></option>
+  <option value="Ask for rate and end client"></option>
+</datalist>
+<datalist id="roleTitles"></datalist>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="assets/config.js"></script>
+<script src="assets/export.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
