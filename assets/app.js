@@ -142,8 +142,10 @@
     return state.jobs.filter((j) => j && j.id).map((j) => {
       const t = state.tracking[j.id] || {};
       const override = t.posting_override && (!j.last_checked || (t.posting_override_on || "") >= j.last_checked) ? t.posting_override : "";
+      const status = t.status || "New";
       return Object.assign({}, j, {
-        status: t.status || "New", applied_on: t.applied_on || "", contact: t.contact || "", notes: t.notes || "",
+        // New and Shortlisted mean "not applied yet", so a leftover applied date is ignored
+        status, applied_on: TO_APPLY.has(status) ? "" : t.applied_on || "", contact: t.contact || "", notes: t.notes || "",
         next_action: t.next_action || "", follow_up_on: t.follow_up_on || "", verified_on: t.verified_on || "",
         posting_status: override || j.posting_status,
       });
@@ -500,6 +502,15 @@
     chain = chain.then(run, run);
     return chain;
   }
+  // Status change plus the applied date that goes with it. New/Shortlisted mean "not applied yet":
+  // moving into Applied from there stamps today, and any leftover applied date is cleared.
+  function statusPatch(cur, status) {
+    const patch = { status };
+    const fromToApply = TO_APPLY.has(cur.status || "New");
+    if (status === "Applied" && (fromToApply || !cur.applied_on)) patch.applied_on = localISO();
+    else if (cur.applied_on && (fromToApply || TO_APPLY.has(status))) patch.applied_on = "";
+    return patch;
+  }
   function saveTracking(id, patch, label) {
     if (!state.writable) { toast("Add a GitHub token in Settings to save changes."); return Promise.resolve(false); }
     const stamp = new Date().toISOString();
@@ -556,8 +567,8 @@
     const cid = cHolder && cHolder.dataset.cid;
     const today = localISO();
     if (a === "clearstage") { state.f.stage = null; render(); }
-    else if (a === "mark-applied" && id) { const cur = state.tracking[id] || {}; saveTracking(id, { status: "Applied", applied_on: cur.applied_on || today }).then((ok) => ok && toast("Marked applied. Follow-up in 7 days.")); }
-    else if (a === "set-status" && id) { saveTracking(id, { status: act.dataset.v }).then((ok) => ok && toast(`Status set to ${act.dataset.v}`)); }
+    else if (a === "mark-applied" && id) { saveTracking(id, statusPatch(state.tracking[id] || {}, "Applied")).then((ok) => ok && toast("Marked applied. Follow-up in 7 days.")); }
+    else if (a === "set-status" && id) { saveTracking(id, statusPatch(state.tracking[id] || {}, act.dataset.v)).then((ok) => ok && toast(`Status set to ${act.dataset.v}`)); }
     else if (a === "auto-check" && id) { startRecheck("stale", [id]); }
     else if (a === "reopen" && id) { saveTracking(id, { posting_override: "Open", posting_override_on: today, verified_on: today }, "reopened").then((ok) => ok && toast("Marked as still open")); }
     else if (a === "still-open" && id) { saveTracking(id, { verified_on: today }, "still open").then((ok) => ok && toast("Marked as verified today")); }
@@ -578,12 +589,13 @@
     const id = holder.dataset.id, cur = state.tracking[id] || {};
     if (act === "status") {
       el.dataset.s = el.value;
-      const patch = { status: el.value };
-      if (el.value === "Applied" && !cur.applied_on) patch.applied_on = localISO();
-      saveTracking(id, patch).then((ok) => { if (ok) toast(`Status set to ${el.value}`); });
+      saveTracking(id, statusPatch(cur, el.value)).then((ok) => { if (ok) toast(`Status set to ${el.value}`); });
     } else if (["applied_on", "contact", "notes", "next_action", "follow_up_on"].includes(act)) {
-      if ((cur[act] || "") === el.value) return;
-      saveTracking(id, { [act]: el.value }).then((ok) => { if (ok) toast("Saved"); });
+      const notApplied = TO_APPLY.has(cur.status || "New");
+      if ((act === "applied_on" && notApplied ? "" : cur[act] || "") === el.value) return;
+      const patch = { [act]: el.value };
+      if (act === "applied_on" && el.value && notApplied) patch.status = "Applied";   // an applied date means she applied
+      saveTracking(id, patch).then((ok) => { if (ok) toast(patch.status ? "Saved. Status set to Applied." : "Saved"); });
     }
   });
   document.addEventListener("focusout", () => { setTimeout(() => { if (state.pendingRender) render(); }, 0); });
@@ -606,9 +618,7 @@
     const id = dragId; dragId = null;
     const status = col.dataset.status, cur = state.tracking[id] || {};
     if ((cur.status || "New") === status) return;
-    const patch = { status };
-    if (status === "Applied" && !cur.applied_on) patch.applied_on = localISO();
-    saveTracking(id, patch).then((ok) => ok && toast(`Moved to ${status}`));
+    saveTracking(id, statusPatch(cur, status)).then((ok) => ok && toast(`Moved to ${status}`));
   });
 
   // ---------------------------------------------------------------- settings panel
