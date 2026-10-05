@@ -376,3 +376,6 @@ body.v2 { padding: 0; }
 @media (max-width: 900px) { .mobile-only { display: inline-block; } }
 .lastrun { margin: 0; line-height: 1.45; }
 .lastrun b { color: var(--dusk-ink); }
+
+.rc-status { margin: 0; font-weight: 700; color: var(--accent); min-height: 1.2em; }
+.autonote { font-size: var(--step--1); color: var(--info); font-weight: 600; }

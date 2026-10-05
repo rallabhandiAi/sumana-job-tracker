@@ -12,7 +12,8 @@
   const TO_APPLY = new Set(["New", "Shortlisted"]);
   const WAITING = new Set(["Applied", "Recruiter screen", "Interviewing"]);
   const STALE_DAYS = 3;
-  const FILES = { jobs: "data/jobs.json", tracking: "data/tracking.json", meta: "data/meta.json", profile: "data/profile.json", contacts: "data/contacts.json" };
+  const FILES = { jobs: "data/jobs.json", tracking: "data/tracking.json", meta: "data/meta.json", profile: "data/profile.json", contacts: "data/contacts.json", reverify: "data/reverify.json" };
+  const WORKFLOW = "reverify.yml";
   const LS_KEY = "sjt.settings.v1"; // shared with the classic view, so the token carries over
   const VIEW_KEY = "sjt.view.v2";
   const EXCELJS_URL = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
@@ -105,7 +106,7 @@
   // ---------------------------------------------------------------- state
   let pendingWrites = 0;
   const state = {
-    jobs: [], tracking: {}, meta: null, profile: null, contacts: [], commits: null,
+    jobs: [], tracking: {}, meta: null, profile: null, contacts: [], commits: null, reverify: null, recheckBusy: false,
     loaded: false, loadError: null, writable: false, view: "today",
     f: { q: "", where: "all", type: "all", match: 0, src: "", showClosed: false, sort: "match", stage: null },
     open: new Set(), pendingRender: false, editingContact: null,
@@ -140,9 +141,11 @@
   function merged() {
     return state.jobs.filter((j) => j && j.id).map((j) => {
       const t = state.tracking[j.id] || {};
+      const override = t.posting_override && (!j.last_checked || (t.posting_override_on || "") >= j.last_checked) ? t.posting_override : "";
       return Object.assign({}, j, {
         status: t.status || "New", applied_on: t.applied_on || "", contact: t.contact || "", notes: t.notes || "",
         next_action: t.next_action || "", follow_up_on: t.follow_up_on || "", verified_on: t.verified_on || "",
+        posting_status: override || j.posting_status,
       });
     });
   }
@@ -177,6 +180,7 @@
   const fitBadge = (j) => `<span class="fitb">${j.fit ? `${esc(j.fit)}/5` : "—"}</span>`;
   const openLink = (j, label = "Open posting ↗") => /^https?:\/\//i.test(j.url || "") ? `<a class="qbtn" href="${esc(j.url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>` : "";
   const dis = () => (state.writable ? "" : " disabled");
+  const autoNote = (j) => { const r = state.reverify && state.reverify.results && state.reverify.results[j.id]; return r && r.result === "unknown" && verifiedOn(j) <= String(r.checked_at || "").slice(0, 10) ? r.note : ""; };
 
   // ---------------------------------------------------------------- TODAY
   function renderToday(all, today) {
@@ -224,7 +228,8 @@
       <div class="item" data-id="${esc(j.id)}">
         <div class="t">${esc(j.title)}</div>
         <div class="s">${esc(j.company)} · last verified ${verifiedOn(j) ? `${daysAgo(verifiedOn(j), today)} days ago` : "never"}</div>
-        <div class="quick">${openLink(j)}${writable ? '<button type="button" class="qbtn primary" data-act="still-open">Still open</button><button type="button" class="qbtn" data-act="set-status" data-v="Closed">Closed</button>' : ""}</div>
+        ${autoNote(j) ? `<div class="s autonote">Auto-check couldn't confirm: ${esc(autoNote(j))}. Open it to check.</div>` : ""}
+        <div class="quick">${openLink(j)}${writable ? `<button type="button" class="qbtn primary" data-act="still-open">Still open</button><button type="button" class="qbtn" data-act="set-status" data-v="Closed">Closed</button>${autoNote(j) ? "" : '<button type="button" class="qbtn" data-act="auto-check">Auto-check</button>'}` : ""}</div>
       </div>`).join("") + (stale.length > 6 ? `<p class="empty-s">${stale.length - 6} more in Opportunities.</p>` : "")
       : `<p class="empty-s">Everything was verified in the last ${STALE_DAYS} days.</p>`;
 
@@ -284,11 +289,13 @@
         <div class="chips">${chips}</div>
         ${tags ? `<div class="tags" aria-label="Skill match">${tags}</div>` : ""}
         <div class="na">Next: ${esc(suggestedAction(j) || "—")}</div>
+        ${autoNote(j) ? `<div class="autonote">Auto-check couldn't confirm: ${esc(autoNote(j))}. Open the posting to check.</div>` : ""}
       </div>
       <div class="side-ctl">
         <label class="sr-only" for="st-${id}">Status for ${esc(j.title)}</label>
         <select class="status" id="st-${id}" data-s="${esc(j.status)}" data-act="status"${dis()}>${opts}</select>
         ${/^https?:\/\//i.test(j.url || "") ? `<a class="open" href="${esc(j.url)}" target="_blank" rel="noopener noreferrer">Open posting ↗</a>` : '<span class="trackline">No posting link (lead)</span>'}
+        ${j.posting_status === "Closed" && state.writable ? '<button type="button" class="qbtn" data-act="reopen">Still open? Reopen</button>' : ""}
         ${track}
       </div>
       <details class="more" data-id="${id}"${state.open.has(j.id) ? " open" : ""}>
@@ -421,6 +428,8 @@
     const m = state.meta;
     $("#lastrun").innerHTML = m && m.last_run_at ? `Last run <b>${esc(fmtCT(m.last_run_at))}</b>${typeof m.last_new_count === "number" ? ` · ${m.last_new_count} new` : ""}` : "";
     $("#addBtn").hidden = !state.writable;
+    $("#recheckBtn").hidden = !state.writable;
+    renderRecheck();
     renderNotice();
     const all = merged();
     // nav counters
@@ -456,9 +465,9 @@
     if (loading) return loading;
     loading = (async () => {
       try {
-        const [jobs, tracking, meta, profile, contacts] = await Promise.all([
+        const [jobs, tracking, meta, profile, contacts, reverify] = await Promise.all([
           readJSON("jobs"), readJSON("tracking"), readJSON("meta"),
-          readJSON("profile").catch(() => null), readJSON("contacts").catch(() => null),
+          readJSON("profile").catch(() => null), readJSON("contacts").catch(() => null), readJSON("reverify").catch(() => null),
         ]);
         if (!jobs) { state.loadError = "notfound"; state.loaded = false; return; }
         state.jobs = Array.isArray(jobs.jobs) ? jobs.jobs : [];
@@ -468,6 +477,7 @@
         }
         state.meta = meta || null;
         state.profile = profile || null;
+        state.reverify = reverify || null;
         state.loaded = true; state.loadError = null;
         state.writable = canUseApi();
         if (state.view === "activity") state.commits = null;
@@ -546,6 +556,8 @@
     if (a === "clearstage") { state.f.stage = null; render(); }
     else if (a === "mark-applied" && id) { const cur = state.tracking[id] || {}; saveTracking(id, { status: "Applied", applied_on: cur.applied_on || today }).then((ok) => ok && toast("Marked applied. Follow-up in 7 days.")); }
     else if (a === "set-status" && id) { saveTracking(id, { status: act.dataset.v }).then((ok) => ok && toast(`Status set to ${act.dataset.v}`)); }
+    else if (a === "auto-check" && id) { startRecheck("stale", [id]); }
+    else if (a === "reopen" && id) { saveTracking(id, { posting_override: "Open", posting_override_on: today, verified_on: today }, "reopened").then((ok) => ok && toast("Marked as still open")); }
     else if (a === "still-open" && id) { saveTracking(id, { verified_on: today }, "still open").then((ok) => ok && toast("Marked as verified today")); }
     else if (a === "followed-up" && id) { saveTracking(id, { follow_up_on: addDaysISO(today, 7) }, "followed up").then((ok) => ok && toast("Next follow-up in 7 days")); }
     else if (a === "open-role" && id) { state.open.add(id); state.f.stage = null; state.f.q = ""; $("#q").value = ""; setView("roles"); setTimeout(() => { const el = document.querySelector(`article.role[data-id="${CSS.escape(id)}"]`); if (el) el.scrollIntoView({ block: "center" }); }, 50); }
@@ -700,6 +712,69 @@
     $("#contactPanel").hidden = true; state.editingContact = null;
     saveContact(contact, existing ? "edited" : "added").then((ok) => ok && toast(existing ? "Contact saved" : "Contact added"));
   });
+
+  // ---------------------------------------------------------------- re-check postings (GitHub Actions workflow in the data repo)
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  function recheckCounts() {
+    const today = localISO(), all = merged();
+    return { stale: all.filter((j) => isStale(j, today)).length, open: all.filter((j) => !isPassed(j) && /^https?:/i.test(j.url || "")).length };
+  }
+  function renderRecheck() {
+    const c = recheckCounts();
+    $("#rcStale").textContent = `Re-check stale (${c.stale})`;
+    $("#rcAll").textContent = `Re-check all open (${c.open})`;
+    $("#rcStale").disabled = state.recheckBusy || !c.stale;
+    $("#rcAll").disabled = state.recheckBusy || !c.open;
+    $("#recheckBtn").textContent = state.recheckBusy ? "Re-checking…" : "Re-check postings";
+    const r = state.reverify;
+    $("#rcLast").innerHTML = r && r.last_run_at ? `Last re-check: <b>${esc(r.last_run_label || fmtCT(r.last_run_at))}</b>${r.last_counts ? ` · ${r.last_counts.checked} checked, ${r.last_counts.open} open, ${r.last_counts.closed} closed, ${r.last_counts.unknown} to check yourself` : ""}` : "No re-checks yet. The twice-daily search also re-checks the 8 oldest roles every morning.";
+  }
+  const setRc = (msg) => { $("#rcStatus").textContent = msg; };
+  async function workflowRuns(perPage) {
+    const r = await fetch(`${repoUrl()}/actions/workflows/${WORKFLOW}/runs?per_page=${perPage}`, { headers: headers(), cache: "no-store" });
+    if (!r.ok) throw httpError(r.status);
+    return (await r.json()).workflow_runs || [];
+  }
+  async function startRecheck(scope, ids) {
+    if (!state.writable) { toast("Add a GitHub token in Settings first."); return; }
+    if (state.recheckBusy) { toast("A re-check is already running."); return; }
+    state.recheckBusy = true; $("#recheckPanel").hidden = false; renderRecheck();
+    setRc(ids && ids.length ? "Starting a check of that posting…" : "Starting…");
+    try {
+      const before = ((await workflowRuns(1))[0] || {}).id || 0;
+      const d = await fetch(`${repoUrl()}/actions/workflows/${WORKFLOW}/dispatches`, {
+        method: "POST", headers: Object.assign(headers(), { "Content-Type": "application/json" }),
+        body: JSON.stringify({ ref: cfg.branch, inputs: { scope, ids: (ids || []).join(",") } }),
+      });
+      if (d.status !== 204) throw httpError(d.status);
+      const t0 = Date.now();
+      let run = null;
+      while (Date.now() - t0 < 6 * 60000) {
+        await sleep(4000);
+        run = (await workflowRuns(5)).find((x) => x.id > before) || null;
+        const secs = Math.round((Date.now() - t0) / 1000);
+        if (run && run.status === "completed") break;
+        setRc(run ? `Checking postings… ${secs}s` : `Waiting for GitHub to start the check… ${secs}s`);
+      }
+      if (!run || run.status !== "completed") { setRc("Still running on GitHub. Results will appear here when it finishes; reload in a minute."); return; }
+      if (run.conclusion !== "success") { setRc("The check didn't finish. Open the Actions tab of the data repository to see why."); return; }
+      await refresh();
+      const c = state.reverify && state.reverify.last_counts;
+      const msg = c ? `Re-checked ${c.checked}: ${c.open} still open, ${c.closed} closed, ${c.unknown} to check yourself.` : "Re-check finished.";
+      setRc(msg); toast(msg);
+    } catch (e) {
+      if (e.status === 403) setRc("Your token can't start re-checks yet. On GitHub, edit the token (Settings → Developer settings → Fine-grained tokens) and set Actions to Read and write for the data repository.");
+      else if (e.status === 404) setRc("The re-check workflow isn't in the data repository yet, or the token can't see it.");
+      else if (e.status === 422) setRc("GitHub rejected the request. Check the branch in Settings.");
+      else setRc("Couldn't start the check. Check your connection and try again.");
+    } finally {
+      state.recheckBusy = false; renderRecheck();
+    }
+  }
+  $("#recheckBtn").addEventListener("click", () => { const p = $("#recheckPanel"); p.hidden = !p.hidden; renderRecheck(); });
+  $("#rcClose").addEventListener("click", () => { $("#recheckPanel").hidden = true; });
+  $("#rcStale").addEventListener("click", () => startRecheck("stale", []));
+  $("#rcAll").addEventListener("click", () => startRecheck("all", []));
 
   // ---------------------------------------------------------------- Excel
   function loadExcelJS() {

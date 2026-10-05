@@ -44,6 +44,7 @@
         <p class="topsub" id="viewSub"></p>
       </div>
       <div class="top-actions">
+        <button class="btn btn-accent" id="recheckBtn" type="button" hidden>Re-check postings</button>
         <button class="btn btn-plain" id="addBtn" type="button" hidden>Add a role</button>
         <button class="btn btn-plain mobile-only" id="excelBtn2" type="button">Excel</button>
         <button class="btn btn-plain mobile-only" id="settingsBtn2" type="button">Settings</button>
@@ -73,6 +74,18 @@
         </div>
       </form>
       <p class="conn" id="connLine"></p>
+    </section>
+
+    <section class="panel" id="recheckPanel" hidden aria-labelledby="recheckTitle">
+      <h2 id="recheckTitle">Re-check postings</h2>
+      <p class="hint">Opens each posting on GitHub's servers. Postings that are gone, expired or say they're no longer accepting applications are marked closed. Sites that block automatic checks, or only load in a real browser, are listed under Re-check before applying for you to open yourself. Takes about a minute.</p>
+      <div class="form-actions">
+        <button class="btn btn-accent" type="button" id="rcStale">Re-check stale</button>
+        <button class="btn btn-plain" type="button" id="rcAll">Re-check all open</button>
+        <button class="btn btn-plain" type="button" id="rcClose">Close</button>
+      </div>
+      <p class="rc-status" id="rcStatus" role="status"></p>
+      <p class="conn" id="rcLast"></p>
     </section>
 
     <section class="panel" id="addPanel" hidden aria-labelledby="addTitle">
