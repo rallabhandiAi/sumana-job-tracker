@@ -18,7 +18,9 @@ assets/config.js      optional defaults: owner, data repo, branch (no secrets)
 assets/favicon.svg
 data/jobs.json        roles (the twice-daily search adds to this file)
 data/tracking.json    statuses, applied dates, contacts, notes (the site writes this file)
-data/meta.json        search log shown at the bottom of the page
+data/meta.json        search log (Activity page)
+data/contacts.json    recruiters and referrals (Contacts page)
+data/reverify.json    latest Re-check postings results
 data/profile.json     search profile used for the Excel export (keep it in the private data repo)
 .nojekyll             serve files as-is (optional)
 ```
@@ -62,7 +64,7 @@ Repo → **Settings** → **Pages** → Build and deployment → Source: **Deplo
 GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**:
 
 - Repository access: **Only select repositories** → the repo that holds `data/`
-- Repository permissions → **Contents: Read and write** (nothing else)
+- Repository permissions → **Contents: Read and write** and **Actions: Read and write** (Actions lets the Re-check postings button start its check)
 - Expiration: your choice (for example 90 days)
 
 Copy the token. It starts with `github_pat_`.
@@ -73,11 +75,19 @@ Open the site → **Settings** → check the owner, data repository and branch �
 
 ## Daily use
 
-- Pick a status on each role. Choosing **Applied** fills in today's date; the role shows **Follow up** in red 7 days later.
-- Open **Why it fits, watch-outs and your notes** for the reasoning, recruiter contact and notes.
-- **Download Excel** builds a workbook (Dashboard, Jobs, Search Profile) from the current data.
-- **Add a role** saves one you found yourself.
-- Every change is a commit to `data/tracking.json`, so you get a full history for free.
+| Page | What it's for |
+|---|---|
+| **Today** | Counts at the top, then three lists: Apply next, Follow up (roles and contacts) and Re-check before applying, each with one-tap buttons |
+| **Opportunities** | Every role with match score, source (official / job board / vendor / recruiter), next action, follow-up date and notes |
+| **Pipeline** | Ready to apply → Applied → Recruiter screen → Interviewing → Offer. Drag cards on a laptop, or use the status dropdown |
+| **Contacts** | Recruiters, referrals and hiring managers with follow-up dates (these show up on Today) |
+| **Activity** | Every saved change and search run, from the data repo's commit history |
+
+- Choosing **Applied** fills in today's date; the role shows **Follow up** 7 days later.
+- **Re-check postings** opens each stale posting on GitHub's servers and marks gone or expired ones as Closed. Sites that block automatic checks are listed for you to open yourself.
+- **Download Excel** builds a workbook (Dashboard, Jobs, Contacts, Search Profile) from the current data.
+- **Add a role** saves one found elsewhere (ChatGPT, LinkedIn, a recruiter call). The link is optional for recruiter leads.
+- Every change is a commit in the data repo, so you get a full history for free.
 
 ## How new roles arrive
 

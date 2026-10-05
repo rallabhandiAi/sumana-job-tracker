@@ -9,8 +9,9 @@ function isoToUTCDate(iso) {
 
 // rows: merged role objects (job fields + status/applied_on/contact/notes), already in display order.
 // profile: { title, subtitle, rows: [[label, text], ...] } read from data/profile.json in the private data repo.
-function buildWorkbook(ExcelJS, rows, todayISO, profile) {
+function buildWorkbook(ExcelJS, rows, todayISO, profile, contacts) {
   profile = profile || {};
+  contacts = Array.isArray(contacts) ? contacts : [];
   const MAX_ROW = 400;
   const FONT = "Arial";
   const DUSK = "FF2E2A4F", MARIGOLD = "FFE3A21A", GRID = "FFD9D6E6", INK = "FF1F1D33", MUTED = "FF5B5873";
@@ -29,7 +30,7 @@ function buildWorkbook(ExcelJS, rows, todayISO, profile) {
   // ---------------- Jobs
   const ws = wb.addWorksheet("Jobs", { views: [{ state: "frozen", xSplit: 4, ySplit: 1 }] });
   const cols = [
-    ["#", 5, false], ["Match (1-5)", 9, false], ["Status", 16, true], ["Job Title", 42, false],
+    ["#", 5, false], ["Match (1-5)", 9, false], ["Status", 16, true], ["Next Action", 26, true], ["Job Title", 42, false],
     ["Company", 26, false], ["Location", 30, false], ["Work Mode", 11, false], ["Type", 20, false],
     ["Pay", 16, false], ["Skill Tags", 22, false], ["Posted", 18, false], ["Found On", 12, false],
     ["Source", 15, false], ["Link", 11, false], ["Why It Fits", 46, false], ["Watch-outs", 44, false],
@@ -49,7 +50,7 @@ function buildWorkbook(ExcelJS, rows, todayISO, profile) {
     c.border = border;
   });
   ws.getRow(1).height = 30;
-  const wrapW = { "Job Title": 42, "Company": 26, "Location": 30, "Type": 20, "Pay": 16, "Skill Tags": 22, "Posted": 18, "Why It Fits": 46, "Watch-outs": 44, "Work Authorization": 24, "Notes": 40 };
+  const wrapW = { "Next Action": 26, "Job Title": 42, "Company": 26, "Location": 30, "Type": 20, "Pay": 16, "Skill Tags": 22, "Posted": 18, "Why It Fits": 46, "Watch-outs": 44, "Work Authorization": 24, "Notes": 40 };
   const centered = new Set(["#", "Match (1-5)", "Work Mode", "Found On", "Link", "Applied On", "Follow-up By"]);
   const lines = (t, w) => Math.max(1, Math.ceil(String(t || "").length / (w * 1.05)));
   const last = rows.length + 1;
@@ -58,7 +59,7 @@ function buildWorkbook(ExcelJS, rows, todayISO, profile) {
     const r = i + 2;
     const applied = isoToUTCDate(j.applied_on);
     const vals = {
-      "#": i + 1, "Match (1-5)": j.fit || null, "Status": j.status || "New", "Job Title": j.title || "",
+      "#": i + 1, "Match (1-5)": j.fit || null, "Status": j.status || "New", "Next Action": j.next_action || "", "Job Title": j.title || "",
       "Company": j.company || "", "Location": j.location || "", "Work Mode": j.mode || "",
       "Type": j.type || "", "Pay": j.pay || "", "Skill Tags": (j.tags || []).join(", "),
       "Posted": j.posted || "", "Found On": isoToUTCDate(j.found_on), "Source": j.source || "",
@@ -77,7 +78,7 @@ function buildWorkbook(ExcelJS, rows, todayISO, profile) {
     ws.getCell(`${L["Match (1-5)"]}${r}`).font = font({ bold: true, size: 11 });
     ws.getCell(`${L["Job Title"]}${r}`).font = font({ bold: true });
     ws.getCell(`${L["Link"]}${r}`).font = font({ color: { argb: "FF1F5FBF" }, underline: true });
-    for (const name of ["Status", "Applied On", "Recruiter / Contact", "Notes"]) {
+    for (const name of ["Status", "Next Action", "Applied On", "Recruiter / Contact", "Notes"]) {
       ws.getCell(`${L[name]}${r}`).fill = fill("FFFFF8E6");
     }
     const h = Math.max(...Object.entries(wrapW).map(([n, w]) => lines(vals[n] && vals[n].text ? vals[n].text : vals[n], w)));
@@ -89,10 +90,11 @@ function buildWorkbook(ExcelJS, rows, todayISO, profile) {
     a.numFmt = "mmm d, yyyy";
     const fu = ws.getCell(`${L["Follow-up By"]}${r}`);
     const av = a.value instanceof Date ? new Date(a.value.getTime() + 7 * 864e5) : "";
-    fu.value = { formula: `IF(${L["Applied On"]}${r}="","",${L["Applied On"]}${r}+7)`, result: av };
+    const explicit = r <= last ? isoToUTCDate(rows[r - 2].follow_up_on) : null;
+    fu.value = explicit || { formula: `IF(${L["Applied On"]}${r}="","",${L["Applied On"]}${r}+7)`, result: av };
     fu.numFmt = "mmm d, yyyy";
     if (r > last) {
-      for (const name of ["Status", "Applied On", "Follow-up By", "Recruiter / Contact", "Notes"]) {
+      for (const name of ["Status", "Next Action", "Applied On", "Follow-up By", "Recruiter / Contact", "Notes"]) {
         const c = ws.getCell(`${L[name]}${r}`);
         c.border = border;
         c.font = font();
@@ -177,8 +179,8 @@ function buildWorkbook(ExcelJS, rows, todayISO, profile) {
 
   header("A18", "How to use this sheet", ["B", "C", "D", "E", "F", "G", "H"]);
   [
-    "On the Jobs tab, edit only the marigold columns: Status, Applied On, Recruiter / Contact, Notes.",
-    "Follow-up By fills itself (Applied On + 7 days) and turns red when a follow-up is due.",
+    "On the Jobs tab, edit only the marigold columns: Status, Next Action, Applied On, Recruiter / Contact, Notes.",
+    "Follow-up By fills itself (Applied On + 7 days, unless a date was set in the tracker) and turns red when due.",
     "Closed, Rejected and Not a fit rows grey out automatically. Use the filter arrows to sort by Match or Status.",
     "Several vendor postings are the same end-client job. Submit through one vendor only; duplicates can get you disqualified.",
     "This is a snapshot. Update statuses in the live tracker so the twice-daily search and your Excel exports stay in sync.",
@@ -194,6 +196,30 @@ function buildWorkbook(ExcelJS, rows, todayISO, profile) {
   db.getCell("B27").numFmt = "mmm d, yyyy";
   db.getCell("D27").numFmt = "mmm d, yyyy";
   set("A29", "Every posting was opened and checked as live when it was added (Dice, ZipRecruiter, Built In, Glassdoor, The Ladders, company career pages).", { size: 8, italic: true, color: { argb: MUTED } });
+
+  // ---------------- Contacts
+  const cs = wb.addWorksheet("Contacts", { views: [{ state: "frozen", ySplit: 1 }] });
+  const ccols = [["Name", 22], ["Company", 22], ["Relationship", 16], ["Related Role", 36], ["How To Reach", 28], ["Last Contact", 13], ["Next Follow-up", 14], ["Status", 11], ["Notes", 50]];
+  ccols.forEach(([name, width], i) => {
+    cs.getColumn(i + 1).width = width;
+    const c = cs.getCell(1, i + 1);
+    c.value = name; c.font = font({ bold: true, color: { argb: "FFFFFFFF" } }); c.fill = fill(DUSK);
+    c.alignment = { horizontal: "center", vertical: "middle", wrapText: true }; c.border = border;
+  });
+  cs.getRow(1).height = 24;
+  contacts.forEach((ct, i) => {
+    const r = i + 2;
+    const vals = [ct.name || "", ct.company || "", ct.relationship || "", ct.related_role || "", ct.reach || "",
+      isoToUTCDate(ct.last_contact), isoToUTCDate(ct.next_follow_up), ct.status || "", ct.notes || ""];
+    vals.forEach((v, k) => {
+      const c = cs.getCell(r, k + 1);
+      c.value = v; c.font = font(); c.border = border; c.alignment = { vertical: "top", wrapText: k === 3 || k === 8 };
+      if (k === 5 || k === 6) c.numFmt = "mmm d, yyyy";
+    });
+    const due = ct.status !== "Done" && ct.next_follow_up && isoToUTCDate(ct.next_follow_up) <= today;
+    if (due) cs.getCell(r, 7).fill = fill("FFFBE3E3");
+  });
+  if (!contacts.length) { cs.getCell("A2").value = "No contacts yet."; cs.getCell("A2").font = font({ italic: true, color: { argb: MUTED } }); }
 
   // ---------------- Search Profile
   const sp = wb.addWorksheet("Search Profile", { views: [{ showGridLines: false }] });
