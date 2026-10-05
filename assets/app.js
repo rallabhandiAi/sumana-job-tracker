@@ -149,6 +149,8 @@
       });
     });
   }
+  const FOUND_BY = { "scheduled-search": "Claude", "initial-curation": "Claude", "chatgpt-search": "ChatGPT", "chatgpt-import": "ChatGPT", manual: "you" };
+  const foundBy = (j) => FOUND_BY[j.added_by] || (/chatgpt/i.test(j.added_by || "") ? "ChatGPT" : /claude/i.test(j.added_by || "") ? "Claude" : "");
   const sourceType = (j) => j.source_type || (j.added_by === "manual" ? "manual" : /\(vendor\)/i.test(j.company || "") ? "vendor" : "board");
   const verifiedOn = (j) => [j.last_checked, j.verified_on].filter(Boolean).sort().pop() || "";
   const isPassed = (j) => CLOSED.has(j.status) || j.posting_status === "Closed";
@@ -304,7 +306,7 @@
           <div><h4>Why it fits</h4><p>${esc(j.why || "—")}</p></div>
           <div><h4>Watch-outs</h4><p>${esc(j.watch || "—")}</p></div>
           <div><h4>Work authorization</h4><p>${esc(j.auth || "Not stated")}</p></div>
-          <div><h4>Source</h4><p>${esc(j.source || "—")}${ver ? ` · verified ${esc(shortDate(ver))}` : ""}</p></div>
+          <div><h4>Source</h4><p>${esc(j.source || "—")}${foundBy(j) ? ` · found by ${esc(foundBy(j))}` : ""}${ver ? ` · verified ${esc(shortDate(ver))}` : ""}</p></div>
           <div class="track-grid">
             <div class="field full"><label for="na-${id}">Next action</label><input id="na-${id}" data-act="next_action" list="nextActions" value="${esc(j.next_action)}" placeholder="${esc(suggestedAction(j))}"${dis()}></div>
             <div class="field"><label for="ap-${id}">Applied on</label><input type="date" id="ap-${id}" data-act="applied_on" value="${esc(j.applied_on)}"${dis()}></div>
@@ -501,13 +503,13 @@
   function saveTracking(id, patch, label) {
     if (!state.writable) { toast("Add a GitHub token in Settings to save changes."); return Promise.resolve(false); }
     const stamp = new Date().toISOString();
-    state.tracking[id] = Object.assign({}, state.tracking[id] || {}, patch, { updated_at: stamp });
+    state.tracking[id] = Object.assign({}, state.tracking[id] || {}, patch, { updated_at: stamp, updated_by: "site" });
     render();
     const what = label || (patch.status ? `status → ${patch.status}` : Object.keys(patch).join(", "));
     return queue(async () => {
       const { latest } = await commitChange("tracking", () => ({ schema_version: 1, tracking: {} }), (doc) => {
         doc.tracking = doc.tracking || {};
-        doc.tracking[id] = Object.assign({}, doc.tracking[id] || {}, patch, { updated_at: stamp });
+        doc.tracking[id] = Object.assign({}, doc.tracking[id] || {}, patch, { updated_at: stamp, updated_by: "site" });
       }, `Tracker: ${titleOf(id)} (${what})`);
       state.tracking = latest.tracking; render();
       return true;
